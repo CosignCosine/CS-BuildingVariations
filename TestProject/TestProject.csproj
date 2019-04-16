@@ -63,13 +63,21 @@
     <Reference Include="0Harmony">
       <HintPath>lib\0Harmony.dll</HintPath>
     </Reference>
+    <Reference Include="Elektrix">
+      <HintPath>lib\Elektrix.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Xml.Linq" />
+    <Reference Include="System.Xml" />
+    <Reference Include="System.Web.Extensions" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="TestProject.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="TestProjectUI.cs" />
-    <Compile Include="TestProjectPatchDestination.cs" />
+    <Compile Include="TestProjectPatches.cs" />
     <Compile Include="TestProjectBuildingData.cs" />
+    <Compile Include="TestProjectSavegameSerializer.cs" />
+    <Compile Include="TestProjectLoading.cs" />
+    <Compile Include="TestProjectAssetSerializer.cs" />
   </ItemGroup>
   <ItemGroup>
     <Folder Include="lib\" />
