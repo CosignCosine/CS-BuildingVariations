@@ -38,7 +38,8 @@ namespace TestProject
             BuildingVariation b = new BuildingVariation();
             List<string> strings = s.Split(':').ToList();
             b.m_publicName = strings[0];
-            b.m_isDefault = strings[1] == "true";
+            Debug.LogError("[Building Variations] " + strings[1]);
+            b.m_isDefault = strings[1].ToLower() == "true";
             b.m_enabledSubMeshes = strings[2].Split(',').ToList();
             return b;
         }
@@ -100,7 +101,7 @@ namespace TestProject
         public static byte[] IngameBuildingVariationMap = new byte[BuildingManager.MAX_BUILDING_COUNT];
 
         public static bool IsSubmeshEnabled(ushort building, BuildingInfo.MeshInfo submesh){
-            string key = BuildingManager.instance.m_buildings.m_buffer[building].Info.name.Replace("_Data", "");
+            string key = BuildingManager.instance.m_buildings.m_buffer[building].Info.name;
             if (!PotentialVariationsMap.ContainsKey(key)) return true;
             if(IngameBuildingVariationMap[building] == 0){
                 BuildingVariation[] defaultVariations = PotentialVariationsMap[key].Where(i => i.m_isDefault).ToArray();

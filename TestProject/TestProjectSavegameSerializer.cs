@@ -71,7 +71,7 @@ namespace TestProject
         public override void OnLevelLoaded(LoadMode mode)
         {
             if(mode == LoadMode.NewGame || mode == LoadMode.LoadGame){
-                DeserializeXML();
+                //DeserializeXML();
             }
         }
 

@@ -16,11 +16,14 @@ namespace TestProject
             if (instanceID == null) return;
             ushort building = ((InstanceID)instanceID).Building;
             Building data = Singleton<BuildingManager>.instance.m_buildings.m_buffer[(int)building];
-            string identifierKey = data.Info.name.Replace("_Data", "");
+            string identifierKey = data.Info.name;
+
+            if (!TestProjectBuildingData.PotentialVariationsMap.ContainsKey(identifierKey)) return;
             List<BuildingVariation> buildingVariations = new List<BuildingVariation>();
             buildingVariations = TestProjectBuildingData.PotentialVariationsMap[identifierKey];
 
-            if (buildingVariations == null || (buildingVariations != null && buildingVariations.Count == 0)) return;
+
+            if (buildingVariations.Count == 0) return;
 
             UIPanel variationPanel = __instance.GetType().GetField("m_VariationPanel", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(__instance) as UIPanel;
             variationPanel.isVisible = true;
@@ -36,12 +39,16 @@ namespace TestProject
 
             }
             variationDropdown.items = items.ToArray();
-            if (TestProjectBuildingData.IngameBuildingVariationMap[building] != 0)
-            {
-                variationDropdown.selectedIndex = TestProjectBuildingData.IngameBuildingVariationMap[building] - 1;
-            }else{
-                variationDropdown.selectedIndex = buildingVariations.FindIndex(r => r.m_isDefault);
-            }
+
+            variationDropdown.selectedIndex = TestProjectBuildingData.IngameBuildingVariationMap[building] - 1;
+            if (variationDropdown.selectedIndex == -1){
+                int q = buildingVariations.FindIndex(r => r.m_isDefault);
+                variationDropdown.selectedIndex = q == -1 ? 0 : q;
+            } 
+
+            Debug.Log(TestProjectBuildingData.IngameBuildingVariationMap[building]);
+            Debug.LogWarning(variationDropdown.selectedIndex);
+
         }
     }
 
@@ -57,10 +64,11 @@ namespace TestProject
                 if (instanceID == null) return false;
                 ushort building = ((InstanceID)instanceID).Building;
                 Building data = Singleton<BuildingManager>.instance.m_buildings.m_buffer[(int)building];
-                string identifierKey = data.Info.name.Replace("_Data", "");
+                string identifierKey = data.Info.name;
 
                 List<BuildingVariation> buildingVariations = TestProjectBuildingData.PotentialVariationsMap[identifierKey];
                 TestProjectBuildingData.IngameBuildingVariationMap[building] = (byte) (value + 1);
+                Debug.LogError(TestProjectBuildingData.IngameBuildingVariationMap[building]);
                 return false;
             }
             return true;
@@ -116,17 +124,14 @@ namespace TestProject
     public static class TestProjectPatchZonedBuildingWorldInfoPanel {
         public static void Postfix()
         {
-            Debug.Log("hello??");
             ushort building = TestProjectLoading.Instance.Building;
             Building data = Singleton<BuildingManager>.instance.m_buildings.m_buffer[building];
-            string identifierKey = data.Info.name.Replace("_Data", "");
-            Debug.Log(identifierKey);
+            string identifierKey = data.Info.name;
 
             if (TestProjectBuildingData.PotentialVariationsMap.ContainsKey(identifierKey))
             {
                 List<BuildingVariation> buildingVariations = TestProjectBuildingData.PotentialVariationsMap[identifierKey];
                 TestProjectLoading.m_variationDropdown.isVisible = true;
-                Debug.Log("hello");
 
                 List<string> items = new List<string>();
                 for (int i = 0; i < buildingVariations.Count; i++)
@@ -138,7 +143,6 @@ namespace TestProject
                 if (TestProjectBuildingData.IngameBuildingVariationMap[building] != 0)
                 {
                     TestProjectLoading.m_variationDropdown.selectedIndex = TestProjectBuildingData.IngameBuildingVariationMap[building] - 1;
-                    Debug.Log(TestProjectLoading.m_variationDropdown.selectedIndex);
                 }
                 else
                 {

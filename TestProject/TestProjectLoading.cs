@@ -4,15 +4,29 @@ using UnityEngine;
 using ColossalFramework;
 using ColossalFramework.UI;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace TestProject
 {
+    
     public class TestProjectLoading : LoadingExtensionBase
     {
         public static UIDropDown m_variationDropdown;
+        public static UIPanel m_variationPanel;
+
+        public UICheckboxDropDown AE_submeshDropdown;
+        public UIDropDown AE_variationDropdown;
+        public UITextField AE_nameField;
+        public UIButton AE_addVariationButton;
+        public UIButton AE_remVariationButton;
+        public UICheckBox AE_setDefaultCheckbox;
+        public UIPanel AE_variationPanel;
 
         public static List<BuildingVariation> buildingVariations = new List<BuildingVariation>();
-        public static byte currentVariation = 0;
+        public byte currentVariation = 0;
+
+        public bool m_isMinimum;
+        public bool m_isMaximum;
 
         public static InstanceID Instance {
             get {
@@ -20,14 +34,21 @@ namespace TestProject
             }
         }
 
-        public static LoadMode m_loadMode = 0;
-
-        public static UIPanel m_variationPanel;
-
         public override void OnLevelLoaded(LoadMode mode)
         {
-            m_loadMode = mode;
-            GameObject.FindObjectOfType<ToolController>().eventEditPrefabChanged += UpdateHelperPanel;
+            GameObject.FindObjectOfType<ToolController>().eventEditPrefabChanged += (info) => {
+                if (!(info is BuildingInfo)) return;
+                BuildingInfo quickInfo = info as BuildingInfo;
+                string[] keys = TestProjectBuildingData.PotentialVariationsMap.Keys.ToArray();
+                for (int i = 0; i < keys.Length; i++){
+                    string[] testStrings = keys[i].Split('.');
+                    if (testStrings.Length < 2) Debug.LogWarning("[BuildingVariations] Malformed object name, aborting (at " + keys[i] + ")");
+                    if(keys[i].Split('.')[1] == quickInfo.name){
+                        buildingVariations = TestProjectBuildingData.PotentialVariationsMap[keys[i]];
+                    }
+                }
+                UpdateHelperPanel(info);
+            };
 
             if (UIView.library.Get<ZonedBuildingWorldInfoPanel>(typeof(ZonedBuildingWorldInfoPanel).Name) == null) return;
             m_variationDropdown = UIView.library.Get<ZonedBuildingWorldInfoPanel>(typeof(ZonedBuildingWorldInfoPanel).Name).component.AddUIComponent<UIDropDown>();
@@ -57,79 +78,93 @@ namespace TestProject
             m_variationDropdown.eventSelectedIndexChanged += (component, value) => {
                 ushort building = Instance.Building;
                 Building data = Singleton<BuildingManager>.instance.m_buildings.m_buffer[building];
-                string identifierKey = data.Info.name.Replace("_Data", "");
-
-                List<BuildingVariation> buildingVariations = TestProjectBuildingData.PotentialVariationsMap[identifierKey];
                 TestProjectBuildingData.IngameBuildingVariationMap[building] = (byte)(value + 1);
-                Debug.LogWarning(TestProjectBuildingData.IngameBuildingVariationMap[building]);
             };
         }
 
+        public string[] GetVariationNamesFrom(List<BuildingVariation> variations){
+            string[] r = new string[256];
+            foreach (BuildingVariation variation in variations)
+            {
+                r.Add(variation.m_publicName);
+            }
+            return r;
+        }
+
+        // quick overload
         public void UpdateHelperPanel(PrefabInfo info) {
             UpdateHelperPanel(info, false);
         }
 
         public void UpdateHelperPanel(PrefabInfo info, bool useToolController) {
-            Debug.LogWarning("UpdateHelperPanel fired");
+            Debug.LogWarning("[Building Variations] UpdateHelperPanel fired");
             if (useToolController) info = GameObject.FindObjectOfType<ToolController>().m_editPrefabInfo;
             if (info == null) return;
-            if (m_variationPanel == null && info is BuildingInfo) CreateVariationHelperPanel();
-
-            Debug.Log("Nothing was null.");
 
             BuildingInfo infoCopy = info as BuildingInfo;
+            Debug.Log(infoCopy.m_subMeshes.Length);
+            if (m_variationPanel == null && info is BuildingInfo) CreateVariationHelperPanel();
 
-            UIView.Find<UICheckboxDropDown>("SubmeshDropdown").isVisible = (buildingVariations.Count != 0);
-            UIView.Find<UIDropDown>("VariationDropdown").isVisible = (buildingVariations.Count != 0);
-            UIView.Find<UIButton>("RemVariation").isVisible = (buildingVariations.Count != 0);
 
-            UIView.Find<UIButton>("AddVariation").isVisible = (buildingVariations.Count != 255);
 
-            List<string> submeshes = new List<string>();
+            m_isMinimum = buildingVariations.Count == 0;
+            m_isMaximum = buildingVariations.Count == 255;
+
+
+            AE_submeshDropdown.isVisible = !m_isMinimum;
+            AE_variationDropdown.isVisible = !m_isMinimum;
+            AE_remVariationButton.isVisible = !m_isMinimum;
+            AE_addVariationButton.isVisible = !m_isMaximum;
+
+            if (m_isMinimum) return;
+
+            if (infoCopy.m_subMeshes.Length == 0)
+            {
+                AE_submeshDropdown.Hide();
+            }
+            else
+            {
+                AE_submeshDropdown.Show();
+            }
+
+            string[] submeshes = new string[256];
             foreach (BuildingInfo.MeshInfo mesh in infoCopy.m_subMeshes)
             {
                 if (mesh.m_subInfo == null) continue;
                 submeshes.Add(mesh.m_subInfo.name);
             }
 
-            Debug.Log("Submeshes compiled");
+            bool fireVariations = submeshes.Length != 0;
 
-            if(submeshes.ToArray() != UIView.Find<UICheckboxDropDown>("SubmeshDropdown").items){
-                UIView.Find<UICheckboxDropDown>("SubmeshDropdown").items = submeshes.ToArray();
-                for (int i = 0; i < UIView.Find<UICheckboxDropDown>("SubmeshDropdown").items.Length; i++)
+            AE_variationPanel.isVisible = fireVariations;
+
+            if(submeshes != AE_submeshDropdown.items){
+                AE_submeshDropdown.items = submeshes;
+                for (int i = 0; i < AE_submeshDropdown.items.Length; i++)
                 {
-                    if (buildingVariations[currentVariation].m_enabledSubMeshes.Contains(UIView.Find<UICheckboxDropDown>("SubmeshDropdown").items[i]))
-                    {
-                        UIView.Find<UICheckboxDropDown>("SubmeshDropdown").SetChecked(i, true);
-                    }
+                    AE_submeshDropdown.SetChecked(i, buildingVariations[currentVariation].m_enabledSubMeshes.Contains(AE_submeshDropdown.items[i]));
                 }
             }
+            (AE_submeshDropdown.triggerButton as UIButton).text = buildingVariations[currentVariation].m_enabledSubMeshes.Join();
 
+            AE_variationDropdown.items = GetVariationNamesFrom(buildingVariations);
+            AE_variationDropdown.selectedIndex = currentVariation;
+            (AE_variationDropdown.triggerButton as UIButton).text = buildingVariations[currentVariation].m_publicName;
 
-            Debug.Log("Submeshes added");
-
-            List<string> variations = new List<string>();
-            foreach(BuildingVariation variation in buildingVariations){
-                variations.Add(variation.m_publicName);
-            }
-            UIView.Find<UIDropDown>("VariationDropdown").items = variations.ToArray();
-            UIView.Find<UIDropDown>("VariationDropdown").selectedIndex = currentVariation;
-            UIView.Find<UIButton>("VariationListTriggerButton").text = buildingVariations[currentVariation].m_publicName;
-
-            UIView.Find<UITextField>("VariationName").text = buildingVariations[currentVariation].m_publicName;
-            // more code
+            AE_nameField.text = buildingVariations[currentVariation].m_publicName;
+            AE_setDefaultCheckbox.isChecked = buildingVariations[currentVariation].m_isDefault;
         }
         public bool CreateVariationHelperPanel()
         {
             if (GameObject.FindObjectOfType<ToolController>().m_editPrefabInfo == null || m_variationPanel != null) return false;
-            UIPanel variationPanel = UIView.Find("FullScreenContainer").AddUIComponent<UIPanel>();
-            variationPanel.width = 400;
-            variationPanel.height = 160;
-            variationPanel.backgroundSprite = "MenuPanel2";
-            variationPanel.name = "VariationPanel";
-            variationPanel.absolutePosition = new Vector3(200f, 250f);
+            AE_variationPanel = UIView.Find("FullScreenContainer").AddUIComponent<UIPanel>();
+            AE_variationPanel.width = 400;
+            AE_variationPanel.height = 160;
+            AE_variationPanel.backgroundSprite = "MenuPanel2";
+            AE_variationPanel.name = "VariationPanel";
+            AE_variationPanel.absolutePosition = new Vector3(200f, 250f);
 
-            UISlicedSprite variationPanelSub = variationPanel.AddUIComponent<UISlicedSprite>();
+            UISlicedSprite variationPanelSub = AE_variationPanel.AddUIComponent<UISlicedSprite>();
             variationPanelSub.width = 400;
             variationPanelSub.height = 40;
             variationPanelSub.name = "VariationPanelSub";
@@ -140,18 +175,18 @@ namespace TestProject
             vpL.height = 23;
             vpL.text = "Building Variations Helper";
             vpL.name = "VariationPanelLabel";
-            vpL.font = UIView.Find<UILabel>("Caption").font;
+            //vpL.font = UIView.Find<UILabel>("Caption").font;
             vpL.textScale = 1.3f;
 
-            UIDragHandle dragHandle = variationPanel.AddUIComponent<UIDragHandle>();
+            UIDragHandle dragHandle = AE_variationPanel.AddUIComponent<UIDragHandle>();
             dragHandle.width = 400;
             dragHandle.height = 40;
             dragHandle.relativePosition = Vector3.zero;
-            dragHandle.target = variationPanel;
+            dragHandle.target = AE_variationPanel;
             dragHandle.BringToFront();
 
             // Select Variations
-            UISlicedSprite variationSelector = variationPanel.AddUIComponent<UISlicedSprite>();
+            UISlicedSprite variationSelector = AE_variationPanel.AddUIComponent<UISlicedSprite>();
             variationSelector.width = 400;
             variationSelector.height = 30;
             variationSelector.name = "VariationSelectorBase";
@@ -163,46 +198,45 @@ namespace TestProject
             variationLabel.relativePosition = new Vector3(10, 12);
             variationLabel.name = "VariationSelectorLabel";
 
-            UIDropDown variationDropdown = variationSelector.AddUIComponent<UIDropDown>();
-            variationDropdown.relativePosition = new Vector3(246, 12);
-            variationDropdown.name = "VariationDropdown";
-            variationDropdown.itemHighlight = "ListItemHighlight";
-            variationDropdown.itemHover = "ListItemHover";
-            variationDropdown.itemHeight = 25;
-            variationDropdown.listBackground = "InfoDisplay";
-            variationDropdown.listHeight = 400;
-            variationDropdown.listWidth = 300;
-            variationDropdown.listPosition = UIDropDown.PopupListPosition.Automatic;
-            variationDropdown.normalBgSprite = "TextFieldPanel";
-            variationDropdown.size = new Vector2(150, 20);
-            variationDropdown.horizontalAlignment = UIHorizontalAlignment.Right;
-            //variationDropdown.atlas = UIView.Find<UIDropDown>("Value").atlas;
-            variationDropdown.eventSelectedIndexChanged += (component, value) =>
+            AE_variationDropdown = variationSelector.AddUIComponent<UIDropDown>();
+            AE_variationDropdown.relativePosition = new Vector3(246, 12);
+            AE_variationDropdown.name = "VariationDropdown";
+            AE_variationDropdown.itemHighlight = "ListItemHighlight";
+            AE_variationDropdown.itemHover = "ListItemHover";
+            AE_variationDropdown.itemHeight = 25;
+            AE_variationDropdown.listBackground = "InfoDisplay";
+            AE_variationDropdown.listHeight = 400;
+            AE_variationDropdown.listWidth = 300;
+            AE_variationDropdown.listPosition = UIDropDown.PopupListPosition.Automatic;
+            AE_variationDropdown.normalBgSprite = "TextFieldPanel";
+            AE_variationDropdown.size = new Vector2(150, 20);
+            AE_variationDropdown.horizontalAlignment = UIHorizontalAlignment.Right;
+            AE_variationDropdown.eventSelectedIndexChanged += (component, value) =>
             {
                 currentVariation = (byte) value;
                 UpdateHelperPanel(null, true);
             };
 
-            UIButton dropdownListTriggerButton = variationDropdown.AddUIComponent<UIButton>();
+            UIButton dropdownListTriggerButton = AE_variationDropdown.AddUIComponent<UIButton>();
             dropdownListTriggerButton.normalBgSprite = "TextFieldPanel";
             dropdownListTriggerButton.normalFgSprite = dropdownListTriggerButton.hoveredFgSprite = "IconUpArrow";
             dropdownListTriggerButton.clipChildren = true;
             dropdownListTriggerButton.text = "None";
             dropdownListTriggerButton.textColor = dropdownListTriggerButton.hoveredTextColor = dropdownListTriggerButton.focusedTextColor = dropdownListTriggerButton.pressedTextColor = new Color32(0, 0, 0, 255);
-            dropdownListTriggerButton.size = variationDropdown.size;
+            dropdownListTriggerButton.size = AE_variationDropdown.size;
             dropdownListTriggerButton.relativePosition = Vector3.zero;
             dropdownListTriggerButton.name = "VariationListTriggerButton";
-            variationDropdown.triggerButton = dropdownListTriggerButton;
+            AE_variationDropdown.triggerButton = dropdownListTriggerButton;
 
-            UIButton addVariationButton = variationSelector.AddUIComponent<UIButton>();
-            addVariationButton.height = 20;
-            addVariationButton.width = 30;
-            addVariationButton.textColor = addVariationButton.hoveredTextColor = addVariationButton.focusedTextColor = addVariationButton.pressedTextColor = new Color32(0, 0, 0, 255);
-            addVariationButton.text = "+";
-            addVariationButton.relativePosition = new Vector3(160, 12);
-            addVariationButton.normalBgSprite = "TextFieldPanel";
-            addVariationButton.name = "AddVariation";
-            addVariationButton.eventClick += (component, eventParam) =>
+            AE_addVariationButton = variationSelector.AddUIComponent<UIButton>();
+            AE_addVariationButton.height = 20;
+            AE_addVariationButton.width = 30;
+            AE_addVariationButton.textColor = AE_addVariationButton.hoveredTextColor = AE_addVariationButton.focusedTextColor = AE_addVariationButton.pressedTextColor = new Color32(0, 0, 0, 255);
+            AE_addVariationButton.text = "+";
+            AE_addVariationButton.relativePosition = new Vector3(160, 12);
+            AE_addVariationButton.normalBgSprite = "TextFieldPanel";
+            AE_addVariationButton.name = "AddVariation";
+            AE_addVariationButton.eventClick += (component, eventParam) =>
             {
                 buildingVariations.Add(new BuildingVariation());
                 currentVariation = (byte) (buildingVariations.Count - 1);
@@ -210,15 +244,15 @@ namespace TestProject
                 Debug.Log(buildingVariations[currentVariation]);
             };
 
-            UIButton remVariationButton = variationSelector.AddUIComponent<UIButton>();
-            remVariationButton.height = 20;
-            remVariationButton.width = 30;
-            remVariationButton.textColor = remVariationButton.hoveredTextColor = remVariationButton.focusedTextColor = remVariationButton.pressedTextColor = new Color32(0, 0, 0, 255);
-            remVariationButton.text = "-";
-            remVariationButton.relativePosition = new Vector3(200, 12);
-            remVariationButton.normalBgSprite = "TextFieldPanel";
-            remVariationButton.name = "RemVariation";
-            remVariationButton.eventClick += (component, eventParam) =>
+            AE_remVariationButton = variationSelector.AddUIComponent<UIButton>();
+            AE_remVariationButton.height = 20;
+            AE_remVariationButton.width = 30;
+            AE_remVariationButton.textColor = AE_remVariationButton.hoveredTextColor = AE_remVariationButton.focusedTextColor = AE_remVariationButton.pressedTextColor = new Color32(0, 0, 0, 255);
+            AE_remVariationButton.text = "-";
+            AE_remVariationButton.relativePosition = new Vector3(200, 12);
+            AE_remVariationButton.normalBgSprite = "TextFieldPanel";
+            AE_remVariationButton.name = "RemVariation";
+            AE_remVariationButton.eventClick += (component, eventParam) =>
             {
                 buildingVariations.RemoveAt(currentVariation);
                 currentVariation--;
@@ -230,7 +264,7 @@ namespace TestProject
             UIButton upArrow1 = variationSelector.AddUIComponent<UIButton>();
             upArrow1.normalFgSprite = "IconUpArrow";
             upArrow1.foregroundSpriteMode = UIForegroundSpriteMode.Scale;
-            upArrow1.relativePosition = (Vector2)variationDropdown.relativePosition + variationDropdown.size - new Vector2(20, 20);
+            upArrow1.relativePosition = (Vector2)AE_variationDropdown.relativePosition + AE_variationDropdown.size - new Vector2(20, 20);
             upArrow1.size = new Vector2(20, 20);
             upArrow1.eventClick += (component, click) =>
             {
@@ -242,7 +276,7 @@ namespace TestProject
 
 
 
-            UISlicedSprite variationName = variationPanel.AddUIComponent<UISlicedSprite>();
+            UISlicedSprite variationName = AE_variationPanel.AddUIComponent<UISlicedSprite>();
             variationName.width = 400;
             variationName.height = 25;
             variationName.name = "VariationNameBase";
@@ -254,23 +288,23 @@ namespace TestProject
             variationNameLabel.relativePosition = new Vector3(10, 12);
             variationNameLabel.name = "VariationNameLabel";
 
-            UITextField nameTextField = variationName.AddUIComponent<UITextField>();
-            nameTextField.size = new Vector2(150, 20);
-            nameTextField.normalBgSprite = "TextFieldPanel";
-            nameTextField.relativePosition = new Vector3(246, 12);
-            nameTextField.cursorWidth = 1;
-            nameTextField.cursorBlinkTime = 0.45f;
-            nameTextField.foregroundSpriteMode = UIForegroundSpriteMode.Stretch;
-            nameTextField.maxLength = 35;
-            nameTextField.textColor = new Color32(12, 21, 22, 255);
-            nameTextField.canFocus = true;
-            nameTextField.readOnly = false;
-            nameTextField.bottomColor = new Color32(255, 255, 255, 255);
-            nameTextField.selectionBackgroundColor = new Color32(0, 105, 210, 255);
-            nameTextField.builtinKeyNavigation = true;
-            nameTextField.selectionSprite = "EmptySprite";
-            nameTextField.name = "VariationName";
-            nameTextField.eventTextChanged += (component, text) =>
+            AE_nameField = variationName.AddUIComponent<UITextField>();
+            AE_nameField.size = new Vector2(150, 20);
+            AE_nameField.normalBgSprite = "TextFieldPanel";
+            AE_nameField.relativePosition = new Vector3(246, 12);
+            AE_nameField.cursorWidth = 1;
+            AE_nameField.cursorBlinkTime = 0.45f;
+            AE_nameField.foregroundSpriteMode = UIForegroundSpriteMode.Stretch;
+            AE_nameField.maxLength = 35;
+            AE_nameField.textColor = new Color32(12, 21, 22, 255);
+            AE_nameField.canFocus = true;
+            AE_nameField.readOnly = false;
+            AE_nameField.bottomColor = new Color32(255, 255, 255, 255);
+            AE_nameField.selectionBackgroundColor = new Color32(0, 105, 210, 255);
+            AE_nameField.builtinKeyNavigation = true;
+            AE_nameField.selectionSprite = "EmptySprite";
+            AE_nameField.name = "VariationName";
+            AE_nameField.eventTextChanged += (component, text) =>
             {
                 buildingVariations[currentVariation].m_publicName = text;
                 UpdateHelperPanel(null, true);
@@ -279,7 +313,7 @@ namespace TestProject
 
             // submeshes
 
-            UISlicedSprite submeshSelector = variationPanel.AddUIComponent<UISlicedSprite>();
+            UISlicedSprite submeshSelector = AE_variationPanel.AddUIComponent<UISlicedSprite>();
             submeshSelector.width = 400;
             submeshSelector.height = 25;
             submeshSelector.name = "SubmeshSelectorBase";
@@ -291,39 +325,37 @@ namespace TestProject
             includedSubmeshes.relativePosition = new Vector3(10, 12);
             includedSubmeshes.name = "SubmeshSelectorLabel";
 
-            UICheckboxDropDown submeshList = submeshSelector.AddUIComponent<UICheckboxDropDown>();
-            submeshList.relativePosition = new Vector3(246, 12);
-            submeshList.name = "SubmeshDropdown";
-            submeshList.checkedSprite = "check-checked";
-            submeshList.itemHighlight = "ListItemHighlight";
-            submeshList.itemHover = "ListItemHover";
-            submeshList.itemHeight = 25;
-            submeshList.listBackground = "InfoDisplay";
-            submeshList.listHeight = 400;
-            submeshList.listWidth = 300;
-            submeshList.listPosition = UICheckboxDropDown.PopupListPosition.Automatic;
-            submeshList.uncheckedSprite = "check-unchecked";
-            submeshList.normalBgSprite = "TextFieldPanel";
-            submeshList.size = new Vector2(150, 20);
-            submeshList.foregroundSpriteMode = UIForegroundSpriteMode.Scale;
-            submeshList.horizontalAlignment = UIHorizontalAlignment.Right;
-            submeshList.eventCheckedChanged += (component, value) =>
+            AE_submeshDropdown = submeshSelector.AddUIComponent<UICheckboxDropDown>();
+            AE_submeshDropdown.relativePosition = new Vector3(246, 12);
+            AE_submeshDropdown.name = "SubmeshDropdown";
+            AE_submeshDropdown.checkedSprite = "check-checked";
+            AE_submeshDropdown.itemHighlight = "ListItemHighlight";
+            AE_submeshDropdown.itemHover = "ListItemHover";
+            AE_submeshDropdown.itemHeight = 25;
+            AE_submeshDropdown.listBackground = "InfoDisplay";
+            AE_submeshDropdown.listHeight = 400;
+            AE_submeshDropdown.listWidth = 300;
+            AE_submeshDropdown.listPosition = UICheckboxDropDown.PopupListPosition.Automatic;
+            AE_submeshDropdown.uncheckedSprite = "check-unchecked";
+            AE_submeshDropdown.normalBgSprite = "TextFieldPanel";
+            AE_submeshDropdown.size = new Vector2(150, 20);
+            AE_submeshDropdown.foregroundSpriteMode = UIForegroundSpriteMode.Scale;
+            AE_submeshDropdown.horizontalAlignment = UIHorizontalAlignment.Right;
+            AE_submeshDropdown.eventAfterDropdownClose += (component) =>
             {
-                string submesh = submeshList.items[value];
-
-                if (buildingVariations[currentVariation].m_enabledSubMeshes.Contains(submesh)) {
-                    buildingVariations[currentVariation].m_enabledSubMeshes.Remove(submesh);
-                } else {
-                    buildingVariations[currentVariation].m_enabledSubMeshes.Add(submesh);
+                for (int i = 0; i < AE_submeshDropdown.items.Length; i++){
+                    string submesh = AE_submeshDropdown.items[i];
+                    if(AE_submeshDropdown.GetChecked(i)){
+                        if(!buildingVariations[currentVariation].m_enabledSubMeshes.Contains(submesh)) buildingVariations[currentVariation].m_enabledSubMeshes.Add(submesh);
+                    }else{
+                        buildingVariations[currentVariation].m_enabledSubMeshes.Remove(submesh);
+                    }
                 }
-            };
-            submeshList.eventAfterDropdownClose += (component) =>
-            {
                 UpdateHelperPanel(null, true);
                 Debug.Log(buildingVariations[currentVariation]);
             };
 
-            UIScrollbar submeshListScrollbar = submeshList.AddUIComponent<UIScrollbar>();
+            UIScrollbar submeshListScrollbar = AE_submeshDropdown.AddUIComponent<UIScrollbar>();
             submeshListScrollbar.height = 400;
             submeshListScrollbar.incrementAmount = 1;
             submeshListScrollbar.minValue = 0;
@@ -332,20 +364,20 @@ namespace TestProject
             submeshListScrollbar.orientation = UIOrientation.Vertical;
             submeshListScrollbar.scrollSize = submeshListScrollbar.stepSize = 1;
 
-            UIButton submeshListTriggerButton = submeshList.AddUIComponent<UIButton>();
+            UIButton submeshListTriggerButton = AE_submeshDropdown.AddUIComponent<UIButton>();
             submeshListTriggerButton.normalBgSprite = "TextFieldPanel";
             submeshListTriggerButton.normalFgSprite = submeshListTriggerButton.hoveredFgSprite = "IconUpArrow";
             submeshListTriggerButton.clipChildren = true;
             submeshListTriggerButton.text = "None";
             submeshListTriggerButton.textColor = submeshListTriggerButton.hoveredTextColor = submeshListTriggerButton.focusedTextColor = submeshListTriggerButton.pressedTextColor = new Color32(0, 0, 0, 255);
-            submeshListTriggerButton.size = submeshList.size;
+            submeshListTriggerButton.size = AE_submeshDropdown.size;
             submeshListTriggerButton.relativePosition = Vector3.zero;
             submeshListTriggerButton.name = "SubmeshListTriggerButton";
 
             UIButton upArrow = submeshSelector.AddUIComponent<UIButton>();
             upArrow.normalFgSprite = "IconUpArrow";
             upArrow.foregroundSpriteMode = UIForegroundSpriteMode.Scale;
-            upArrow.relativePosition = (Vector2)submeshList.relativePosition + submeshList.size - new Vector2(20, 20);
+            upArrow.relativePosition = (Vector2)AE_submeshDropdown.relativePosition + AE_submeshDropdown.size - new Vector2(20, 20);
             upArrow.size = new Vector2(20, 20);
             upArrow.eventClick += (component, click) =>
             {
@@ -355,10 +387,10 @@ namespace TestProject
             upArrow.atlas = UIView.Find<UIDropDown>("CellLength").Find<UIButton>("Button").atlas;
             upArrow.BringToFront();
 
-            submeshList.listScrollbar = submeshListScrollbar;
-            submeshList.triggerButton = submeshListTriggerButton;
+            AE_submeshDropdown.listScrollbar = submeshListScrollbar;
+            AE_submeshDropdown.triggerButton = submeshListTriggerButton;
 
-            UISlicedSprite setDefault = variationPanel.AddUIComponent<UISlicedSprite>();
+            UISlicedSprite setDefault = AE_variationPanel.AddUIComponent<UISlicedSprite>();
             setDefault.width = 400;
             setDefault.height = 25;
             setDefault.name = "SetDefaultBase";
@@ -370,32 +402,35 @@ namespace TestProject
             setDefaultLabel.relativePosition = new Vector3(10, 12);
             setDefaultLabel.name = "SetDefaultLabel";
 
-            UICheckBox setDefaultCheckbox = setDefault.AddUIComponent<UICheckBox>();
-            setDefaultCheckbox.relativePosition = new Vector3(375f, 12f);
-            setDefaultCheckbox.size = new Vector2(16, 16);
-            setDefaultCheckbox.name = "VariationDefault";
-            UISprite sprite = setDefaultCheckbox.AddUIComponent<UISprite>();
+            AE_setDefaultCheckbox = setDefault.AddUIComponent<UICheckBox>();
+            AE_setDefaultCheckbox.relativePosition = new Vector3(375f, 12f);
+            AE_setDefaultCheckbox.size = new Vector2(16, 16);
+            AE_setDefaultCheckbox.name = "VariationDefault";
+            UISprite sprite = AE_setDefaultCheckbox.AddUIComponent<UISprite>();
             sprite.spriteName = "check-unchecked";
             sprite.atlas = UIView.Find<UIDropDown>("CellLength").Find<UIButton>("Button").atlas;
-            sprite.size = setDefaultCheckbox.size;
+            sprite.size = AE_setDefaultCheckbox.size;
             sprite.relativePosition = Vector3.zero;
-            setDefaultCheckbox.checkedBoxObject = sprite.AddUIComponent<UISprite>();
-            ((UISprite)setDefaultCheckbox.checkedBoxObject).spriteName = "check-checked";
-            ((UISprite)setDefaultCheckbox.checkedBoxObject).atlas = UIView.Find<UIDropDown>("CellLength").Find<UIButton>("Button").atlas;
-            setDefaultCheckbox.checkedBoxObject.size = setDefaultCheckbox.size;
-            setDefaultCheckbox.checkedBoxObject.relativePosition = Vector3.zero;
-            setDefaultCheckbox.eventCheckChanged += (component, check) => {
-                buildingVariations[currentVariation].m_isDefault = !buildingVariations[currentVariation].m_isDefault;
+            AE_setDefaultCheckbox.checkedBoxObject = sprite.AddUIComponent<UISprite>();
+            ((UISprite)AE_setDefaultCheckbox.checkedBoxObject).spriteName = "check-checked";
+            ((UISprite)AE_setDefaultCheckbox.checkedBoxObject).atlas = UIView.Find<UIDropDown>("CellLength").Find<UIButton>("Button").atlas;
+            AE_setDefaultCheckbox.checkedBoxObject.size = AE_setDefaultCheckbox.size;
+            AE_setDefaultCheckbox.checkedBoxObject.relativePosition = Vector3.zero;
+            AE_setDefaultCheckbox.eventCheckChanged += (component, check) => {
+                buildingVariations[currentVariation].m_isDefault = check;
                 UpdateHelperPanel(null, true);
             };
 
-            m_variationPanel = variationPanel;
+            m_variationPanel = AE_variationPanel;
             return true;
         }
 
         public override void OnLevelUnloading()
         {
             if (m_variationDropdown != null) m_variationDropdown.parent.RemoveUIComponent(m_variationDropdown);
+            AE_nameField?.parent.RemoveUIComponent(AE_nameField);
+            AE_submeshDropdown?.parent.RemoveUIComponent(AE_submeshDropdown);
+            AE_variationDropdown?.parent.RemoveUIComponent(AE_variationDropdown);
         }
     }
 }

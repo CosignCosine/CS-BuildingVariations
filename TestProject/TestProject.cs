@@ -10,8 +10,8 @@ namespace TestProject
         private readonly string harmonyId = "elektrix.buildingvariations";
         private HarmonyInstance harmony;
 
-        public string Name => "! Elektrix's Test Mod";
-        public string Description => "Where elektrix tests his electric things. [in a purely platonic manner]";
+        public string Name => "Building Variations";
+        public string Description => "Submeshes can now be configured as a variation on the original building.";
 
         public void OnEnabled(){
             harmony = HarmonyInstance.Create(harmonyId);

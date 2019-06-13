@@ -8,32 +8,6 @@ using System.Text;
 
 namespace TestProject
 {
-    public class TestProjectAssetData : IDataContainer
-    {
-        public const string DataId = "VariationData";
-        public const int DataVersion = 0;
-
-
-        public List<string> BuildingVariations = new List<string>();
-
-        public void Serialize(DataSerializer s)
-        {
-            string[] ids = BuildingVariations.ToArray();
-            s.WriteUniqueStringArray(ids);
-        }
-
-        public void Deserialize(DataSerializer s)
-        {
-            string[] ids = s.ReadUniqueStringArray();
-            BuildingVariations = ids.ToList();
-        }
-
-        public void AfterDeserialize(DataSerializer s)
-        {
-            // validation?
-        }
-    }
-
     public class TestProjectCustomAssetData : IAssetDataExtension
     {
         private string kKey = "BuildingVariations";
@@ -43,6 +17,8 @@ namespace TestProject
             if(userData.ContainsKey(kKey)){
                 byte[] bytes = userData[kKey];
                 string s1 = Encoding.ASCII.GetString(bytes);
+
+                Debug.Log("[Building Variations] Asset configuration: {" + s1 + "} loaded.");
                 List<string> s = s1.Split('|').ToList();
 
                 List<BuildingVariation> buildingVariations = new List<BuildingVariation>();
@@ -70,17 +46,19 @@ namespace TestProject
                 s.Add(TestProjectLoading.buildingVariations[i].ToSerializableString());
             }
             string s1 = String.Join("|", s.ToArray());
+            Debug.Log("[Building Variations] Asset configuration: {" + s1 + "} saved.");
             byte[] bytes = Encoding.ASCII.GetBytes(s1);
             userData.Add(kKey, bytes);
         }
 
         public void OnCreated(IAssetData assetData)
         {
-            Debug.Log(assetData.ToString());
+            Debug.Log("[Building Variations] Asset initiated");
         }
 
         public void OnReleased()
         {
+            Debug.LogError("[Building Variations] Unused");
         }
     }
 }
